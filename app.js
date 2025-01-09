@@ -17,7 +17,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack workspace.
+const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
 You'll respond to those questions in a professional way.
 When you include markdown text, convert them to Slack compatible ones.
@@ -49,7 +49,7 @@ const assistant = new Assistant({
       // whenever the user changes context (via the `assistant_thread_context_changed` event).
       // The `say` utility sends this metadata along automatically behind the scenes.
       // !! Please note: this is only intended for development and demonstrative purposes.
-      await say('Hi, how can I help?');
+      await say('Hi, how can Suplo help?');
 
       await saveThreadContext();
 
@@ -79,7 +79,7 @@ const assistant = new Assistant({
        * not, provided, 'Try these prompts:' will be displayed.
        * https://api.slack.com/methods/assistant.threads.setSuggestedPrompts
        */
-      await setSuggestedPrompts({ prompts, title: 'Here are some suggested options:' });
+      await setSuggestedPrompts({ prompts, title: 'Here are some suggested options by Suplo:' });
     } catch (e) {
       logger.error(e);
     }
@@ -223,3 +223,51 @@ app.assistant(assistant);
     app.logger.error('Failed to start the app', error);
   }
 })();
+
+//enable direct mention for summarization
+app.event('app_mention', async ({ event, client, say }) => {
+  // Check if the message specifically asks for a summary
+  if (event.text.toLowerCase().includes('summarize') || event.text.toLowerCase().includes('summary')) {
+    // Execute channel summary logic
+    try {
+      const channelHistory = await client.conversations.history({
+        channel: event.channel,
+        limit: 50
+      });
+      
+      let llmPrompt = `Please generate a brief summary of the following messages from Slack channel <#${event.channel}>:`;
+      for (const m of channelHistory.messages.reverse()) {
+        if (m.user) llmPrompt += `\n<@${m.user}> says: ${m.text}`;
+      }
+
+      const messages = [
+        { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
+        { role: 'user', content: llmPrompt },
+      ];
+
+      const llmResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        n: 1,
+        messages,
+      });
+
+      await say({ text: llmResponse.choices[0].message.content });
+    } catch (error) {
+      console.error(error);
+    }
+  } else {
+    // Handle other types of questions
+    const messages = [
+      { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
+      { role: 'user', content: event.text }
+    ];
+
+    const llmResponse = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      n: 1,
+      messages,
+    });
+
+    await say({ text: llmResponse.choices[0].message.content });
+  }
+});
