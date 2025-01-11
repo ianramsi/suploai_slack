@@ -6,7 +6,7 @@ const { OpenAI } = require('openai');
 
 config();
 
-/** Initialization */
+/** Initialization Slack*/
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
@@ -14,15 +14,7 @@ const app = new App({
   logLevel: LogLevel.DEBUG,
 });
 
-// Model configuration
-const LLM_PROVIDERS = {
-  OPENAI: 'openai',
-  DEEPSEEK: 'deepseekAi'
-};
-
-const DEFAULT_MODEL = LLM_PROVIDERS.DEEPSEEK;
-
-// Initialize LLM clients
+// Initialize Openai
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -33,70 +25,6 @@ const deepseekAi = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY
 });
 
-
-// Store user model preferences
-const userModelPreferences = new Map();
-
-// Command to allow users to switch between different LLM providers
-// Usage: /set-model openai or /set-model deepseek
-app.command('/set-model', async ({ command, ack, say }) => {
-  await ack();
-  const userId = command.user_id;
-  const model = command.text.toLowerCase();
-  
-  // Validate if requested model exists in our supported providers
-  if (Object.values(LLM_PROVIDERS).includes(model)) {
-    userModelPreferences.set(userId, model);
-    await say(`Model preference updated to ${model}`);
-  } else {
-    // Show available models if invalid model specified
-    await say(`Available models: ${Object.values(LLM_PROVIDERS).join(', ')}`);
-  }
-});
-
-// Enhanced LLM request handler with fallback mechanism
-async function handleLLMRequest(messages, userId) {
-  // Get user's preferred model or use default if not set
-  const model = userModelPreferences.get(userId) || DEFAULT_MODEL;
-  
-  try {
-    // Handle OpenAI requests
-    if (model === LLM_PROVIDERS.OPENAI) {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        n: 1,
-        messages,
-      });
-      return response.choices[0].message.content;
-    } 
-    // Handle DeepSeek requests
-    else if (model === LLM_PROVIDERS.DEEPSEEK) {
-      const response = await deepseekAi.chat.completions.create({
-        model: 'deepseek-chat',
-        n: 1,
-        messages,
-      });
-      return response.choices[0].message.content;
-    }
-    // Fallback to default model if selected model is invalid
-    // Passing null as userId prevents infinite recursion
-    return handleLLMRequest(messages, null); 
-  } catch (error) {
-    console.error('LLM Error:', error);
-    throw error;
-  }
-}
-
-// Command to check which LLM model is currently active for the user
-// will change to make deepseek the only  model
-// Usage: /current-model
-app.command('/current-model', async ({ command, ack, say }) => {
-  await ack();
-  const userId = command.user_id;
-  // Retrieve user's current model preference or show default
-  const currentModel = userModelPreferences.get(userId) || DEFAULT_MODEL;
-  await say(`Your current model is: ${currentModel}`);
-});
 
 const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
@@ -183,8 +111,8 @@ const assistant = new Assistant({
           { role: 'user', content: llmPrompt },
         ];
 
-        const llmResponse = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+        const llmResponse = await deepseekAi.chat.completions.create({
+          model: 'deepseek-chat',
           n: 1,
           messages,
         });
@@ -208,8 +136,8 @@ const assistant = new Assistant({
 
       const messages = [{ role: 'system', content: DEFAULT_SYSTEM_CONTENT }, ...threadHistory, userMessage];
 
-      const llmResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const llmResponse = await deepseekAi.chat.completions.create({
+        model: 'deepseek-chat',
         n: 1,
         messages,
       });
@@ -228,9 +156,9 @@ app.assistant(assistant);
 (async () => {
   try {
     await app.start();
-    app.logger.info('⚡️ Bolt app is running!');
+    app.logger.info('⚡️ Suplo app is running!');
   } catch (error) {
-    app.logger.error('Failed to start the app', error);
+    app.logger.error('Failed to start Suplo', error);
   }
 })();
 
@@ -253,8 +181,8 @@ app.event('app_mention', async ({ event, client, say }) => {
         { role: 'user', content: llmPrompt },
       ];
 
-      const llmResponse = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+      const llmResponse = await deepseekAi.chat.completions.create({
+        model: 'deepseek-chat',
         n: 1,
         messages,
       });
@@ -269,8 +197,8 @@ app.event('app_mention', async ({ event, client, say }) => {
       { role: 'user', content: event.text }
     ];
 
-    const llmResponse = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    const llmResponse = await deepseekAi.chat.completions.create({
+      model: 'deepseek-chat',
       n: 1,
       messages,
     });
