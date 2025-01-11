@@ -88,6 +88,7 @@ async function handleLLMRequest(messages, userId) {
 }
 
 // Command to check which LLM model is currently active for the user
+// will change to make deepseek the only  model
 // Usage: /current-model
 app.command('/current-model', async ({ command, ack, say }) => {
   await ack();
