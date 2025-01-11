@@ -1,6 +1,9 @@
 {
   "display_information": {
-    "name": "Bolt for JavaScript Assistant"
+    "name": "Suplo_AI Assistant Idiot ",
+    "description": "You Helpful Assistant",
+    "background_color": "#59592c",
+    "long_description": "Suplo is AI Assistant, the myth and the legend. Suplo is made by human just like you so it can still make mistakes. Use Suplo as your helpful companion not as your source of truth :p"
   },
   "features": {
     "app_home": {
@@ -9,23 +12,43 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "Bolt for JavaScript Assistant",
+      "display_name": "Suplo_AI Assistant Idiot",
       "always_online": false
     },
     "assistant_view": {
-      "assistant_description": "An Assistant built with Bolt for JavaScript, at your service!",
+      "assistant_description": "Suplo_AI means Assitant Idiot not Intelligent, at your service!",
       "suggested_prompts": []
-    }
+    },
+     
+    "slash_commands": [
+      {
+        "command": "/set-model",
+        "description": "Set your preferred AI model (openai or deepseek)",
+        "usage_hint": "[openai|deepseek]",
+        "should_escape": false
+      },
+      {
+        "command": "/current-model",
+        "description": "Check which AI model is currently active",
+        "should_escape": false
+      }
+    ]
+ 
+
   },
   "oauth_config": {
     "scopes": {
       "bot": [
+        "app_mentions:read",
         "assistant:write",
-        "channels:join",
-        "im:history",
         "channels:history",
+        "chat:write",
+        "files:read",
         "groups:history",
-        "chat:write"
+        "im:history",
+        "im:write",
+        "canvases:write",
+        "commands"
       ]
     }
   },
@@ -34,11 +57,12 @@
       "bot_events": [
         "assistant_thread_context_changed",
         "assistant_thread_started",
-        "message.im"
+        "message.im",
+        "app_mention"
       ]
     },
     "interactivity": {
-      "is_enabled": false
+      "is_enabled": true
     },
     "org_deploy_enabled": false,
     "socket_mode_enabled": true,

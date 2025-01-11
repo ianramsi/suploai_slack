@@ -2,6 +2,8 @@ const { App, LogLevel, Assistant } = require('@slack/bolt');
 const { config } = require('dotenv');
 const { OpenAI } = require('openai');
 
+//import { OpenAI } from 'openai';
+
 config();
 
 /** Initialization */
@@ -12,9 +14,87 @@ const app = new App({
   logLevel: LogLevel.DEBUG,
 });
 
-/** OpenAI Setup */
+// Model configuration
+const LLM_PROVIDERS = {
+  OPENAI: 'openai',
+  DEEPSEEK: 'deepseekAi'
+};
+
+const DEFAULT_MODEL = LLM_PROVIDERS.DEEPSEEK;
+
+// Initialize LLM clients
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Initialize DeepSeek
+const deepseekAi = new OpenAI({
+  baseURL: 'https://api.deepseek.com/v1',
+  apiKey: process.env.DEEPSEEK_API_KEY
+});
+
+
+// Store user model preferences
+const userModelPreferences = new Map();
+
+// Command to allow users to switch between different LLM providers
+// Usage: /set-model openai or /set-model deepseek
+app.command('/set-model', async ({ command, ack, say }) => {
+  await ack();
+  const userId = command.user_id;
+  const model = command.text.toLowerCase();
+  
+  // Validate if requested model exists in our supported providers
+  if (Object.values(LLM_PROVIDERS).includes(model)) {
+    userModelPreferences.set(userId, model);
+    await say(`Model preference updated to ${model}`);
+  } else {
+    // Show available models if invalid model specified
+    await say(`Available models: ${Object.values(LLM_PROVIDERS).join(', ')}`);
+  }
+});
+
+// Enhanced LLM request handler with fallback mechanism
+async function handleLLMRequest(messages, userId) {
+  // Get user's preferred model or use default if not set
+  const model = userModelPreferences.get(userId) || DEFAULT_MODEL;
+  
+  try {
+    // Handle OpenAI requests
+    if (model === LLM_PROVIDERS.OPENAI) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        n: 1,
+        messages,
+      });
+      return response.choices[0].message.content;
+    } 
+    // Handle DeepSeek requests
+    else if (model === LLM_PROVIDERS.DEEPSEEK) {
+      const response = await deepseekAi.chat.completions.create({
+        model: 'deepseek-chat',
+        n: 1,
+        messages,
+      });
+      return response.choices[0].message.content;
+    }
+    // Fallback to default model if selected model is invalid
+    // Passing null as userId prevents infinite recursion
+    return handleLLMRequest(messages, null); 
+  } catch (error) {
+    console.error('LLM Error:', error);
+    throw error;
+  }
+}
+
+// Command to check which LLM model is currently active for the user
+// Usage: /current-model
+app.command('/current-model', async ({ command, ack, say }) => {
+  await ack();
+  const userId = command.user_id;
+  // Retrieve user's current model preference or show default
+  const currentModel = userModelPreferences.get(userId) || DEFAULT_MODEL;
+  await say(`Your current model is: ${currentModel}`);
 });
 
 const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
@@ -23,32 +103,12 @@ You'll respond to those questions in a professional way.
 When you include markdown text, convert them to Slack compatible ones.
 When a prompt has Slack's special syntax like <@USER_ID> or <#CHANNEL_ID>, you must keep them as-is in your response.`;
 
+// Assistant configuration and event handlers
 const assistant = new Assistant({
-  /**
-   * (Recommended) A custom ThreadContextStore can be provided, inclusive of methods to
-   * get and save thread context. When provided, these methods will override the `getThreadContext`
-   * and `saveThreadContext` utilities that are made available in other Assistant event listeners.
-   */
-  // threadContextStore: {
-  //   get: async ({ context, client, payload }) => {},
-  //   save: async ({ context, client, payload }) => {},
-  // },
-
-  /**
-   * `assistant_thread_started` is sent when a user opens the Assistant container.
-   * This can happen via DM with the app or as a side-container within a channel.
-   * https://api.slack.com/events/assistant_thread_started
-   */
   threadStarted: async ({ event, logger, say, setSuggestedPrompts, saveThreadContext }) => {
     const { context } = event.assistant_thread;
 
     try {
-      // Since context is not sent along with individual user messages, it's necessary to keep
-      // track of the context of the conversation to better assist the user. Sending an initial
-      // message to the user with context metadata facilitates this, and allows us to update it
-      // whenever the user changes context (via the `assistant_thread_context_changed` event).
-      // The `say` utility sends this metadata along automatically behind the scenes.
-      // !! Please note: this is only intended for development and demonstrative purposes.
       await say('Hi, how can Suplo help?');
 
       await saveThreadContext();
@@ -63,9 +123,6 @@ const assistant = new Assistant({
         },
       ];
 
-      // If the user opens the Assistant container in a channel, additional
-      // context is available.This can be used to provide conditional prompts
-      // that only make sense to appear in that context (like summarizing a channel).
       if (context.channel_id) {
         prompts.push({
           title: 'Summarize channel',
@@ -73,27 +130,13 @@ const assistant = new Assistant({
         });
       }
 
-      /**
-       * Provide the user up to 4 optional, preset prompts to choose from.
-       * The optional `title` prop serves as a label above the prompts. If
-       * not, provided, 'Try these prompts:' will be displayed.
-       * https://api.slack.com/methods/assistant.threads.setSuggestedPrompts
-       */
       await setSuggestedPrompts({ prompts, title: 'Here are some suggested options by Suplo:' });
     } catch (e) {
       logger.error(e);
     }
   },
 
-  /**
-   * `assistant_thread_context_changed` is sent when a user switches channels
-   * while the Assistant container is open. If `threadContextChanged` is not
-   * provided, context will be saved using the AssistantContextStore's `save`
-   * method (either the DefaultAssistantContextStore or custom, if provided).
-   * https://api.slack.com/events/assistant_thread_context_changed
-   */
   threadContextChanged: async ({ logger, saveThreadContext }) => {
-    // const { channel_id, thread_ts, context: assistantContext } = event.assistant_thread;
     try {
       await saveThreadContext();
     } catch (e) {
@@ -101,32 +144,13 @@ const assistant = new Assistant({
     }
   },
 
-  /**
-   * Messages sent to the Assistant do not contain a subtype and must
-   * be deduced based on their shape and metadata (if provided).
-   * https://api.slack.com/events/message
-   */
   userMessage: async ({ client, logger, message, getThreadContext, say, setTitle, setStatus }) => {
     const { channel, thread_ts } = message;
 
     try {
-      /**
-       * Set the title of the Assistant thread to capture the initial topic/question
-       * as a way to facilitate future reference by the user.
-       * https://api.slack.com/methods/assistant.threads.setTitle
-       */
       await setTitle(message.text);
+      await setStatus('is typing Biatch!!....');
 
-      /**
-       * Set the status of the Assistant to give the appearance of active processing.
-       * https://api.slack.com/methods/assistant.threads.setStatus
-       */
-      await setStatus('is typing..');
-
-      /** Scenario 1: Handle suggested prompt selection
-       * The example below uses a prompt that relies on the context (channel) in which
-       * the user has asked the question (in this case, to summarize that channel).
-       */
       if (message.text === 'Assistant, please summarize the activity in this channel!') {
         const threadContext = await getThreadContext();
         let channelHistory;
@@ -137,8 +161,6 @@ const assistant = new Assistant({
             limit: 50,
           });
         } catch (e) {
-          // If the Assistant is not in the channel it's being asked about,
-          // have it join the channel and then retry the API call
           if (e.data.error === 'not_in_channel') {
             await client.conversations.join({ channel: threadContext.channel_id });
             channelHistory = await client.conversations.history({
@@ -150,7 +172,6 @@ const assistant = new Assistant({
           }
         }
 
-        // Prepare and tag the prompt and messages for LLM processing
         let llmPrompt = `Please generate a brief summary of the following messages from Slack channel <#${threadContext.channel_id}>:`;
         for (const m of channelHistory.messages.reverse()) {
           if (m.user) llmPrompt += `\n<@${m.user}> says: ${m.text}`;
@@ -161,31 +182,23 @@ const assistant = new Assistant({
           { role: 'user', content: llmPrompt },
         ];
 
-        // Send channel history and prepared request to LLM
         const llmResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           n: 1,
           messages,
         });
 
-        // Provide a response to the user
         await say({ text: llmResponse.choices[0].message.content });
 
         return;
       }
 
-      /**
-       * Scenario 2: Format and pass user messages directly to the LLM
-       */
-
-      // Retrieve the Assistant thread history for context of question being asked
       const thread = await client.conversations.replies({
         channel,
         ts: thread_ts,
         oldest: thread_ts,
       });
 
-      // Prepare and tag each message for LLM processing
       const userMessage = { role: 'user', content: message.text };
       const threadHistory = thread.messages.map((m) => {
         const role = m.bot_id ? 'assistant' : 'user';
@@ -194,19 +207,15 @@ const assistant = new Assistant({
 
       const messages = [{ role: 'system', content: DEFAULT_SYSTEM_CONTENT }, ...threadHistory, userMessage];
 
-      // Send message history and newest question to LLM
       const llmResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         n: 1,
         messages,
       });
 
-      // Provide a response to the user
       await say({ text: llmResponse.choices[0].message.content });
     } catch (e) {
       logger.error(e);
-
-      // Send message to advise user and clear processing status if a failure occurs
       await say({ text: 'Sorry, something went wrong!' });
     }
   },
@@ -226,9 +235,7 @@ app.assistant(assistant);
 
 //enable direct mention for summarization
 app.event('app_mention', async ({ event, client, say }) => {
-  // Check if the message specifically asks for a summary
   if (event.text.toLowerCase().includes('summarize') || event.text.toLowerCase().includes('summary')) {
-    // Execute channel summary logic
     try {
       const channelHistory = await client.conversations.history({
         channel: event.channel,
@@ -256,7 +263,6 @@ app.event('app_mention', async ({ event, client, say }) => {
       console.error(error);
     }
   } else {
-    // Handle other types of questions
     const messages = [
       { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
       { role: 'user', content: event.text }
