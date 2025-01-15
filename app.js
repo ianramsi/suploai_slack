@@ -85,7 +85,7 @@ const assistant = new Assistant({
 
       // Filter out the initial greeting from thread history
       const threadHistory = thread.messages
-        .filter(m => m.text !== 'Hi, how can Suplo help?')
+        .filter(m => m.text !== 'Hi, sorry Suplo lagi ngehang....')
         .map(m => ({
           role: m.bot_id ? 'assistant' : 'user',
           content: m.text
@@ -99,8 +99,8 @@ const assistant = new Assistant({
 
       //logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
 
-      const llmResponse = await deepseekAi.chat.completions.create({
-        model: 'deepseek-chat',
+      const llmResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
         n: 1,
         messages,
         temperature: 0.7 // Adding temperature for more varied responses
@@ -145,8 +145,8 @@ app.event('app_mention', async ({ event, client, say }) => {
         { role: 'user', content: llmPrompt },
       ];
 
-      const llmResponse = await deepseekAi.chat.completions.create({
-        model: 'deepseek-chat',
+      const llmResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
         n: 1,
         messages,
       });
@@ -162,8 +162,8 @@ app.event('app_mention', async ({ event, client, say }) => {
       { role: 'user', content: event.text },
     ];
 
-    const llmResponse = await deepseekAi.chat.completions.create({
-      model: 'deepseek-chat',
+    const llmResponse = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
       n: 1,
       messages,
     });
