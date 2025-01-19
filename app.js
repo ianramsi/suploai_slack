@@ -1,6 +1,7 @@
 const { App, LogLevel, Assistant } = require('@slack/bolt');
 const { config } = require('dotenv');
 const { OpenAI } = require('openai');
+const { MessagesPage } = require('openai/resources/beta/threads/messages.mjs');
 
 config();
 
@@ -77,6 +78,13 @@ const assistant = new Assistant({
       await setTitle(message.text);
       await setStatus('is typing....biatch');
 
+      //add identity check
+      const identityQuestions = ['who are you', 'what is your name', 'what is your identity', 'what are you?'];
+      if (identityQuestions.some(q => message.text.toLowerCase().includes(q))) {
+        await say("I'm Suplo, LKS Assistant (Idiot) ready to serve all LKS Members. Created by The Man, The Myth, The LEGEND!!");
+        return;
+        
+      }
       const thread = await client.conversations.replies({
         channel,
         ts: thread_ts,
