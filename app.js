@@ -25,8 +25,9 @@ const deepseekAi = new OpenAI({
 });
 
 const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
+Your name is Suplo and you have very long distance relative with Sophon.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
-You'll respond to those questions in a professional way.
+You'll respond to those questions in a professional way unless being requested to do otherwise.
 When you include markdown text, convert them to Slack compatible ones.
 When a prompt has Slack's special syntax like <@USER_ID> or <#CHANNEL_ID>, you must keep them as-is in your response.
 Avoid starting responses with greetings unless explicitly requested by the user.`;
@@ -83,7 +84,7 @@ const assistant = new Assistant({
       if (identityQuestions.some(q => message.text.toLowerCase().includes(q))) {
         await say("I'm Suplo, LKS Assistant (Idiot) ready to serve all LKS Members. Created by The Man, The Myth, The LEGEND!!");
         return;
-        
+
       }
       const thread = await client.conversations.replies({
         channel,
