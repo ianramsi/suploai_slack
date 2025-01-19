@@ -25,9 +25,9 @@ const deepseekAi = new OpenAI({
 });
 
 const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
-Your name is Suplo and you have very long distance relative with Sophon.
+Your name is Suplo.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
-You'll respond to those questions in a professional way unless being requested to do otherwise.
+You'll respond to those questions in a professional way.
 When you include markdown text, convert them to Slack compatible ones.
 When a prompt has Slack's special syntax like <@USER_ID> or <#CHANNEL_ID>, you must keep them as-is in your response.
 Avoid starting responses with greetings unless explicitly requested by the user.`;
@@ -95,6 +95,7 @@ const assistant = new Assistant({
       // Filter out the initial greeting from thread history
       const threadHistory = thread.messages
         .filter(m => m.text !== 'Hi, sorry Suplo lagi ngehang....')
+        .slice(-10) //keep only the last 10 of message
         .map(m => ({
           role: m.bot_id ? 'assistant' : 'user',
           content: m.text
@@ -106,7 +107,7 @@ const assistant = new Assistant({
         { role: 'user', content: message.text }
       ];
 
-      //logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
+      logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
 
       const llmResponse = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
