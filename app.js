@@ -24,8 +24,7 @@ const deepseekAi = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
 
-const DEFAULT_SYSTEM_CONTENT = `You're an assistant in a Slack Langit Kreasi Solusindo workspace.
-Your name is Suplo.
+const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
 You'll respond to those questions in a professional way.
 When you include markdown text, convert them to Slack compatible ones.
@@ -80,9 +79,9 @@ const assistant = new Assistant({
       await setStatus('is typing....biatch');
 
       //add identity check
-      const identityQuestions = ['who are you', 'what is your name', 'what is your identity', 'what are you?'];
+      const identityQuestions = ['who are you', 'siapa kamu','what is your name', 'what is your identity', 'what are you?'];
       if (identityQuestions.some(q => message.text.toLowerCase().includes(q))) {
-        await say("I'm Suplo, LKS Assistant (Idiot) ready to serve all LKS Members. Created by The Man, The Myth, The LEGEND!!");
+        await say("I'm Suplo, LKS Assistant (Idiot) ready to serve all LKS Members. Suplo is The Man, The Myth, The LEGEND!!");
         return;
 
       }
@@ -107,10 +106,10 @@ const assistant = new Assistant({
         { role: 'user', content: message.text }
       ];
 
-      logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
+      //logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
 
       const llmResponse = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         n: 1,
         messages,
         temperature: 0.7 // Adding temperature for more varied responses
@@ -156,7 +155,7 @@ app.event('app_mention', async ({ event, client, say }) => {
       ];
 
       const llmResponse = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         n: 1,
         messages,
       });
@@ -173,7 +172,7 @@ app.event('app_mention', async ({ event, client, say }) => {
     ];
 
     const llmResponse = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',//change from 'gpt-3.5-turbo',
       n: 1,
       messages,
     });
