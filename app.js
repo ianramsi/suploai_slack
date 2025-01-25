@@ -1,7 +1,7 @@
 const { App, LogLevel, Assistant } = require('@slack/bolt');
 const { config } = require('dotenv');
 const { OpenAI } = require('openai');
-const { MessagesPage } = require('openai/resources/beta/threads/messages.mjs');
+// Removed unused ESM import that caused Jest compatibility issues
 const axios = require('axios');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
