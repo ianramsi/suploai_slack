@@ -29,7 +29,7 @@ const deepseekAi = new OpenAI({
 
 const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
-You'll respond to those questions in a professional way.
+You'll respond to those questions in a professional way unless explicitly requested otherwise.
 When you include markdown text, convert them to Slack compatible ones.
 When a prompt has Slack's special syntax like <@USER_ID> or <#CHANNEL_ID>, you must keep them as-is in your response.
 Avoid starting responses with greetings unless explicitly requested by the user.`;
@@ -237,7 +237,8 @@ app.event('file_shared', async ({event, client, say}) => {
       await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
     } else {
       await say ({ text: 'Something unexpected happened while processing your request' });
-      consoleole.error('Document processing error --> ',error);
+      console.error('Document processing error --> ',error);
+      
     }  
   }
 });
