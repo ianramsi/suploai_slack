@@ -796,12 +796,13 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
 });
 
 async function getSalesforceToken() {
-  const salesforceResponse = await fetch(process.env.SALESFORCE_TOKEN_URL, {
-      method: "POST",
+  const sf_token_url = "https://langitkreasisolusindo.my.salesforce.com/services/oauth2/token?grant_type=password&client_id="+process.env.SALESFORCE_CLIENT_ID+"&client_secret="+process.env.SALESFORCE_CLIENT_SECRET+"&username="+process.env.SALESFORCE_USER_NAME+"&password="+process.env.SALESFORCE_USER_PASS
+  const salesforceResponse = await fetch(sf_token_url, {
+    method: "POST",
   });
 
   if (!salesforceResponse.ok) {
-      throw new Error(`Salesforce token error: ${salesforceResponse.statusText}`);
+    throw new Error(`Salesforce token error: ${salesforceResponse.statusText}`);
   }
 
   const salesforceTokenData = await salesforceResponse.json();
