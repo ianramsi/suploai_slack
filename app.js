@@ -381,8 +381,7 @@ app.view('timesheet_modal', async ({ ack, body, view, client }) => {
       // Ambil email dari profil pengguna
       const email = userInfo.user.profile?.email || "unknown@example.com";
 
-      const timeSheetChannelId = "C08DANL8MBM"; //sandbox
-      // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
+      const timeSheetChannelId = process.env.SLACK_TIMESHEET_CHANNEL;
 
       const updatedMsg = `<@${userId}> submitted the following TimeSheet: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`;
 
@@ -472,6 +471,8 @@ app.action('approve_request', async ({ ack, body, client, action }) => {
           channel: userId,
           text: `Your timesheet has been approved: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`,
       });
+      
+      const approverId = body.user.id;
 
       // Update pesan asli untuk menghapus tombol
       await client.chat.update({
@@ -482,7 +483,7 @@ app.action('approve_request', async ({ ack, body, client, action }) => {
                   type: "section",
                   text: {
                       type: "mrkdwn",
-                      text: `Timesheet submitted by <@${userId}> has been approved: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                      text: `Timesheet submitted by <@${userId}> has been approved by <@${approverId}>: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
                   },
               },
           ],
@@ -530,6 +531,8 @@ app.action('reject_request', async ({ ack, body, client, action }) => {
           text: `Your timesheet has been rejected: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`,
       });
 
+      const approverId = body.user.id;
+
       // Update pesan asli untuk menghapus tombol
       await client.chat.update({
           channel: body.channel.id,
@@ -539,7 +542,7 @@ app.action('reject_request', async ({ ack, body, client, action }) => {
                   type: "section",
                   text: {
                       type: "mrkdwn",
-                      text: `Timesheet submitted by <@${userId}> has been rejected: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                      text: `Timesheet submitted by <@${userId}> has been rejected by <@${approverId}>: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
                   },
               },
           ],
@@ -661,8 +664,7 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
       // Ambil email dari profil pengguna
       const email = userInfo.user.profile?.email || "unknown@example.com";
 
-      const timeSheetChannelId = "C08DANL8MBM"; //sandbox
-      // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
+      const timeSheetChannelId = process.env.SLACK_TIMESHEET_CHANNEL;
 
       const updatedMsg = `<@${userId}> submitted the following Leave Request: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`;
 
@@ -756,6 +758,8 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
           text: `Your Leave Request has been approved: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
       });
 
+      const approverId = body.user.id;
+
       // Update pesan asli untuk menghapus tombol
       await client.chat.update({
           channel: body.channel.id,
@@ -765,7 +769,7 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
                   type: "section",
                   text: {
                       type: "mrkdwn",
-                      text: `Leave Request submitted by <@${userId}> has been approved: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+                      text: `Leave Request submitted by <@${userId}> has been approved by <@${approverId}>: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
                   },
               },
           ],
@@ -792,6 +796,8 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
           text: `Your Leave Request has been rejected: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
       });
 
+      const approverId = body.user.id;
+
       // Update pesan asli untuk menghapus tombol
       await client.chat.update({
           channel: body.channel.id,
@@ -801,7 +807,7 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
                   type: "section",
                   text: {
                       type: "mrkdwn",
-                      text: `Leave Request submitted by <@${userId}> has been rejected: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                      text: `Leave Request submitted by <@${userId}> has been rejected by <@${approverId}>: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
                   },
               },
           ],
