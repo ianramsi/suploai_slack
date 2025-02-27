@@ -1,10 +1,12 @@
 const { App, LogLevel, Assistant } = require('@slack/bolt');
+const { WebClient } = require('@slack/web-api');
 const { config } = require('dotenv');
 const { OpenAI } = require('openai');
 // Removed unused ESM import that caused Jest compatibility issues
 const axios = require('axios');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const fetch = require("node-fetch");
 
 config();
 
@@ -26,6 +28,28 @@ const deepseekAi = new OpenAI({
   baseURL: 'https://api.deepseek.com/v1',
   apiKey: process.env.DEEPSEEK_API_KEY,
 });
+
+const userClient = new WebClient(process.env.SLACK_USER_TOKEN);
+
+
+const formatTimestamp = (timestamp) => {
+  const date = new Date((timestamp + 7 * 60 * 60) * 1000); // Adjust for timezone
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are zero-based
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
+const formatDate = (dateStr) => {
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are zero-based
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${day}/${month}/${year}`;
+};
 
 const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
@@ -242,3 +266,678 @@ app.event('file_shared', async ({event, client, say}) => {
     }  
   }
 });
+
+app.command('/timesheet-lks', async ({ ack, body, client }) => {
+  await ack();
+  try {
+      await client.views.open({
+          trigger_id: body.trigger_id,
+          view: {
+              type: 'modal',
+              callback_id: 'timesheet_modal',
+              title: {
+                  type: 'plain_text',
+                  text: 'Submit TimeSheet'
+              },
+              submit: {
+                  type: 'plain_text',
+                  text: 'Submit'
+              },
+              close: {
+                  type: 'plain_text',
+                  text: 'Cancel'
+              },
+              blocks: [
+                  {
+                      type: 'input',
+                      block_id: 'start_datetime_block',
+                      element: {
+                          type: 'datetimepicker',
+                          action_id: 'start_datetime',
+                          initial_date_time: Math.floor(Date.now() / 1000) // Set initial time to current time in seconds
+                      },
+                      label: {
+                          type: 'plain_text',
+                          text: 'Start datetime'
+                      }
+                  },
+                  {
+                      type: 'input',
+                      block_id: 'end_datetime_block',
+                      element: {
+                          type: 'datetimepicker',
+                          action_id: 'end_datetime',
+                          initial_date_time: Math.floor(Date.now() / 1000) // Set initial time to current time in seconds
+                      },
+                      label: {
+                          type: 'plain_text',
+                          text: 'End datetime'
+                      }
+                  },
+                  {
+                      type: 'input',
+                      block_id: 'work_mode_block',
+                      element: {
+                          type: 'static_select',
+                          action_id: 'work_mode',
+                          placeholder: {
+                              type: 'plain_text',
+                              text: 'Select work mode'
+                          },
+                          options: [
+                              {
+                                  text: {
+                                      type: 'plain_text',
+                                      text: 'WFO'
+                                  },
+                                  value: 'WFO'
+                              },
+                              {
+                                  text: {
+                                      type: 'plain_text',
+                                      text: 'WFA'
+                                  },
+                                  value: 'WFA'
+                              },
+                              {
+                                  text: {
+                                      type: 'plain_text',
+                                      text: 'Hybrid'
+                                  },
+                                  value: 'Hybrid'
+                              }
+                          ]
+                      },
+                      label: {
+                          type: 'plain_text',
+                          text: 'Work Mode'
+                      }
+                  }
+              ]
+          }
+      });
+  } catch (error) {
+      console.error('Error opening timesheet modal:', error);
+      console.error(JSON.stringify(error, null, 2));
+  }
+});
+
+app.view('timesheet_modal', async ({ ack, body, view, client }) => {
+  await ack();
+  try {
+      const startDatetime = view.state.values.start_datetime_block.start_datetime.selected_date_time;
+      const endDatetime = view.state.values.end_datetime_block.end_datetime.selected_date_time;
+      const workMode = view.state.values.work_mode_block.work_mode.selected_option.value;
+
+      // Proses data yang diterima
+      console.log('Start Datetime:', startDatetime);
+      console.log('End Datetime:', endDatetime);
+      console.log('Work Mode:', workMode);
+
+      // Lanjutkan dengan fungsi yang Anda inginkan setelah submit
+      const userId = body.user.id;
+      console.log("User :", userId);
+      // Dapatkan informasi pengguna
+      const userInfo = await client.users.info({
+          user: body.user.id,
+      });
+
+      // Ambil email dari profil pengguna
+      const email = userInfo.user.profile?.email || "unknown@example.com";
+      console.log("User Email:", email);
+
+      const timeSheetChannelId = "C08DANL8MBM"; //sandbox
+      // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
+
+      const updatedMsg = `<@${userId}> submitted the following TimeSheet: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`;
+
+      await client.chat.postMessage({
+          channel: timeSheetChannelId,
+          text: updatedMsg,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: updatedMsg,
+                  },
+              },
+              {
+                  type: "actions",
+                  block_id: `timesheet_actions`,
+                  elements: [
+                      {
+                          type: "button",
+                          text: {
+                              type: "plain_text",
+                              text: "Approve",
+                          },
+                          action_id: "approve_request",
+                          style: "primary",
+                          value: JSON.stringify({
+                              email,
+                              startDatetime,
+                              endDatetime,
+                              workMode,
+                              userId,
+                          }),
+                      },
+                      {
+                          type: "button",
+                          text: {
+                              type: "plain_text",
+                              text: "Reject",
+                          },
+                          action_id: "reject_request",
+                          style: "danger",
+                          value: JSON.stringify({
+                              email,
+                              startDatetime,
+                              endDatetime,
+                              workMode,
+                              userId,
+                          }),
+                      },
+                  ],
+              },
+          ],
+      });
+  } catch (error) {
+      console.error('Error submitting timesheet:', error);
+      console.error(JSON.stringify(error, null, 2));
+      await client.chat.postMessage({
+          channel: body.user.id,
+          text: '❌ Sorry, there was an error submitting your timesheet.'
+      });
+  }
+});
+
+app.action('approve_request', async ({ ack, body, client, action }) => {
+  await ack(); // Acknowledge the action first
+  try {
+      const metadata = JSON.parse(action.value);
+      const { email, startDatetime, endDatetime, workMode, userId } = metadata;
+      
+      const startDate = formatTimestamp(startDatetime);
+      const endDate = formatTimestamp(endDatetime);
+      console.log('Start Datetime:', startDate);
+      console.log('End Datetime:', endDate);
+
+      // Proses pengiriman data ke Salesforce
+      // Panggil fungsi yang diinginkan
+      await handleTimesheetApproval({
+          client,
+          userId,
+          email,
+          startDate,
+          endDate,
+          workMode
+      });
+
+      // Kirim konfirmasi ke pengguna
+      await client.chat.postMessage({
+          channel: userId,
+          text: `Your timesheet has been approved: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`,
+      });
+
+      // Update pesan asli untuk menghapus tombol
+      await client.chat.update({
+          channel: body.channel.id,
+          ts: body.message.ts,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: `Timesheet submitted by <@${userId}> has been approved: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                  },
+              },
+          ],
+      });
+
+  } catch (error) {
+      console.error('Error approving timesheet:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error approving your timesheet: ${error.message}`,
+      });
+  }
+});
+
+app.action('reject_request', async ({ ack, body, client, action }) => {
+  await ack(); // Acknowledge the action first
+  try {
+      const metadata = JSON.parse(action.value);
+      const { email, startDatetime, endDatetime, workMode, userId } = metadata;
+
+      // Kirim notifikasi penolakan ke pengguna
+      await client.chat.postMessage({
+          channel: userId,
+          text: `Your timesheet has been rejected: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`,
+      });
+
+      // Update pesan asli untuk menghapus tombol
+      await client.chat.update({
+          channel: body.channel.id,
+          ts: body.message.ts,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: `Timesheet submitted by <@${userId}> has been rejected: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                  },
+              },
+          ],
+      });
+
+  } catch (error) {
+      console.error('Error rejecting timesheet:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error rejecting your timesheet: ${error.message}`,
+      });
+  }
+});
+
+app.command('/leaverequest-lks', async ({ ack, body, client }) => {
+  await ack();
+  try {
+      await client.views.open({
+          trigger_id: body.trigger_id,
+          view: {
+              type: 'modal',
+              callback_id: 'leaverequest_modal',
+              title: {
+                  type: 'plain_text',
+                  text: 'Submit Leave Request'
+              },
+              submit: {
+                  type: 'plain_text',
+                  text: 'Submit'
+              },
+              close: {
+                  type: 'plain_text',
+                  text: 'Cancel'
+              },
+              blocks: [
+                  {
+                      type: 'input',
+                      block_id: 'title_block',
+                      label: {
+                          type: 'plain_text',
+                          text: 'Title'
+                      },
+                      element: {
+                          type: 'plain_text_input',
+                          action_id: 'title',
+                          placeholder: {
+                          type: 'plain_text',
+                          text: 'Enter post title'
+                          }
+                      }
+                  },
+                  {
+                      type: 'input',
+                      block_id: 'start_date_block',
+                      label: {
+                          type: 'plain_text',
+                          text: 'Start Date'
+                      },
+                      element: {
+                          type: 'datepicker',
+                          action_id: 'start_date',
+                          initial_date: new Date().toISOString().split('T')[0]
+                      }
+                  },
+                  {
+                      type: 'input',
+                      block_id: 'end_date_block',
+                      label: {
+                          type: 'plain_text',
+                          text: 'End Date'
+                      },
+                      element: {
+                          type: 'datepicker',
+                          action_id: 'end_date',
+                          initial_date: new Date().toISOString().split('T')[0]
+                      }
+                  },
+                  {
+                      type: 'input',
+                      block_id: 'note_block',
+                      label: {
+                          type: 'plain_text',
+                          text: 'Note'
+                      },
+                      element: {
+                          type: 'plain_text_input',
+                          action_id: 'note',
+                          multiline: true,
+                          placeholder: {
+                          type: 'plain_text',
+                          text: 'Enter additional notes'
+                          }
+                      }
+                  }
+              ]
+          }
+      });
+  } catch (error) {
+      console.error('Error opening timesheet modal:', error);
+      console.error(JSON.stringify(error, null, 2));
+  }
+});
+
+app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
+  await ack();
+  try {
+      const title = view.state.values.title_block.title.value;
+      const startDate = view.state.values.start_date_block.start_date.selected_date;
+      const endDate = view.state.values.end_date_block.end_date.selected_date;
+      const note = view.state.values.note_block.note.value;
+
+      // Proses data yang diterima
+      console.log('title:', title);
+      console.log('startDate:', startDate);
+      console.log('endDate:', endDate);
+      console.log('note:', note);
+
+      // Lanjutkan dengan fungsi yang Anda inginkan setelah submit
+      const userId = body.user.id;
+      console.log("User :", userId);
+      // Dapatkan informasi pengguna
+      const userInfo = await client.users.info({
+          user: body.user.id,
+      });
+
+      // Ambil email dari profil pengguna
+      const email = userInfo.user.profile?.email || "unknown@example.com";
+      console.log("User Email:", email);
+
+      const timeSheetChannelId = "C08DANL8MBM"; //sandbox
+      // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
+
+      const updatedMsg = `<@${userId}> submitted the following Leave Request: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`;
+
+      await client.chat.postMessage({
+          channel: timeSheetChannelId,
+          text: updatedMsg,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: updatedMsg,
+                  },
+              },
+              {
+                  type: "actions",
+                  block_id: `leaverequest_actions`,
+                  elements: [
+                      {
+                          type: "button",
+                          text: {
+                              type: "plain_text",
+                              text: "Approve",
+                          },
+                          action_id: "approve_request_lr",
+                          style: "primary",
+                          value: JSON.stringify({
+                              email,
+                              startDate,
+                              endDate,
+                              title,
+                              note,
+                              userId,
+                          }),
+                      },
+                      {
+                          type: "button",
+                          text: {
+                              type: "plain_text",
+                              text: "Reject",
+                          },
+                          action_id: "reject_request_lr",
+                          style: "danger",
+                          value: JSON.stringify({
+                              email,
+                              startDate,
+                              endDate,
+                              title,
+                              note,
+                              userId,
+                          }),
+                      },
+                  ],
+              },
+          ],
+      });
+  } catch (error) {
+      console.error('Error submitting timesheet:', error);
+      console.error(JSON.stringify(error, null, 2));
+      await client.chat.postMessage({
+          channel: body.user.id,
+          text: '❌ Sorry, there was an error submitting your timesheet.'
+      });
+  }
+});
+
+app.action('approve_request_lr', async ({ ack, body, client, action }) => {
+  await ack(); // Acknowledge the action first
+  try {
+      const metadata = JSON.parse(action.value);
+      const { email, startDate, endDate, title, note, userId } = metadata;
+      
+      const startDateFormatted = formatDate(startDate);
+      const endDateFormatted = formatDate(endDate);
+      console.log('Start Datetime:', startDateFormatted);
+      console.log('End Datetime:', endDateFormatted);
+
+      // Proses pengiriman data ke Salesforce
+      // Panggil fungsi yang diinginkan
+      await handleLeaveRequestApproval({
+          client,
+          userId,
+          email,
+          startDateFormatted,
+          endDateFormatted,
+          title,
+          note
+      });
+
+      // Kirim konfirmasi ke pengguna
+      await client.chat.postMessage({
+          channel: userId,
+          text: `Your Leave Request has been approved: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+      });
+
+      // Update pesan asli untuk menghapus tombol
+      await client.chat.update({
+          channel: body.channel.id,
+          ts: body.message.ts,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: `Leave Request submitted by <@${userId}> has been approved: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+                  },
+              },
+          ],
+      });
+
+  } catch (error) {
+      console.error('Error approving timesheet:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error approving your timesheet: ${error.message}`,
+      });
+  }
+});
+
+app.action('reject_request_lr', async ({ ack, body, client, action }) => {
+  await ack(); // Acknowledge the action first
+  try {
+      const metadata = JSON.parse(action.value);
+      const { email, startDatetime, endDatetime, workMode, userId } = metadata;
+
+      // Kirim notifikasi penolakan ke pengguna
+      await client.chat.postMessage({
+          channel: userId,
+          text: `Your Leave Request has been rejected: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+      });
+
+      // Update pesan asli untuk menghapus tombol
+      await client.chat.update({
+          channel: body.channel.id,
+          ts: body.message.ts,
+          blocks: [
+              {
+                  type: "section",
+                  text: {
+                      type: "mrkdwn",
+                      text: `Leave Request submitted by <@${userId}> has been rejected: (<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>)\nWork Mode: ${workMode}`,
+                  },
+              },
+          ],
+      });
+
+  } catch (error) {
+      console.error('Error rejecting timesheet:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error rejecting your timesheet: ${error.message}`,
+      });
+  }
+});
+
+async function getSalesforceToken() {
+  //sandbox
+  const salesforceTokenUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/oauth2/token?grant_type=password&client_id=3MVG9Po2PmyYruunnyVvSeN53GfglSltLNdZQnnfFHuMSzNqIGmMC_qvWLAQS005qlwLJyU20clsCL6ZG0l1x&client_secret=6897962A378DC71C222378F0199720E44D4E9DCEAF76EA326DDD74F7EB00E5E2&username=timesheet@integration.com&password=Slipi@2025";
+  //prod
+  // const salesforceTokenUrl = "https://langitkreasisolusindo.my.salesforce.com/services/oauth2/token?grant_type=password&client_id=3MVG9wt4IL4O5wvIVaQ.kFvsOzhobbDoL1Fvc.6xHEpxwuKIoQtDXX3N__gBbQAUeyWIEeMxfrkGdlFZa49Jg&client_secret=76032DC08F1F50CC9DAA5F3281FC369250903B45812DA5CC7E53C9BFFC8AB49E&username=duktek.integrationlks@langitkreasi.com&password=Slipi@2024";
+
+  const salesforceResponse = await fetch(salesforceTokenUrl, {
+      method: "POST",
+  });
+
+  if (!salesforceResponse.ok) {
+      throw new Error(`Salesforce token error: ${salesforceResponse.statusText}`);
+  }
+
+  const salesforceTokenData = await salesforceResponse.json();
+  return salesforceTokenData.access_token;
+}
+
+async function handleTimesheetApproval({ client, userId, email, startDate, endDate, workMode }) {
+  try {
+      console.log('Start Datetime2:', startDate);
+      console.log('End Datetime2:', endDate);
+
+      // Kirim data ke Salesforce API (contoh)
+      //sandbox
+      const salesforceApiUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/apexrest/time-sheet/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
+      //prod
+      // const salesforceApiUrl = "https://langitkreasisolusindo.my.salesforce.com/services/apexrest/time-sheet/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
+      
+      const accessToken = await getSalesforceToken();
+
+      const postData = {
+          Email: email,
+          WorkStart: startDate,
+          WorkEnd: endDate,
+          WorkMode: workMode,
+      };
+
+      const apiResponse = await fetch(salesforceApiUrl, {
+          method: "POST",
+          headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+          },
+          body: JSON.stringify(postData),
+      });
+
+      if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`Salesforce email: ${email}, API Error: ${errorText}`);
+      }
+
+      console.log("Timesheet data successfully sent to Salesforce");
+
+      let statusText = "Office";
+      let statusEmoji = ":office:";
+
+      if (workMode == "Hybrid") {
+      statusText = "Commuting";
+      statusEmoji = ":bus:";
+      } else if (workMode == "WFA") {
+      statusText = "Working remotely";
+      statusEmoji = ":house_with_garden:";
+      }
+
+      // Update status pengguna
+      await userClient.users.profile.set({
+          user: userId,
+          profile: {
+              status_text: statusText,
+              status_emoji: statusEmoji,
+              status_expiration: endDate, // Opsional: hapus status otomatis
+          }
+      });
+
+  } catch (error) {
+      console.error('Error handling timesheet approval:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error processing your timesheet: ${error.message}`
+      });
+  }
+}
+
+async function handleLeaveRequestApproval({ client, userId, email, startDateFormatted, endDateFormatted, title, note }) {
+  try {
+      console.log('Start Datetime2:', startDateFormatted);
+      console.log('End Datetime2:', endDateFormatted);
+
+      // Kirim data ke Salesforce API (contoh)
+      //sandbox
+      const salesforceApiUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/apexrest/leave-request/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
+      //prod
+      // const salesforceApiUrl = "https://langitkreasisolusindo.my.salesforce.com/services/apexrest/leave-request/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
+      
+      const accessToken = await getSalesforceToken();
+
+      const postData = {
+          Email: email,
+          Title: title,
+          Note: note,
+          StartDate: startDateFormatted,
+          EndDate: endDateFormatted,
+      };
+
+      const apiResponse = await fetch(salesforceApiUrl, {
+          method: "POST",
+          headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+          },
+          body: JSON.stringify(postData),
+      });
+
+      if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`Salesforce email: ${email}, API Error: ${errorText}`);
+      }
+
+      console.log("Timesheet data successfully sent to Salesforce");
+
+  } catch (error) {
+      console.error('Error handling timesheet approval:', error);
+      await client.chat.postMessage({
+          channel: userId,
+          text: `❌ Error processing your timesheet: ${error.message}`
+      });
+  }
+}
