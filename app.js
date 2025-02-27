@@ -488,6 +488,27 @@ app.action('approve_request', async ({ ack, body, client, action }) => {
           ],
       });
 
+      let statusText = "Office";
+      let statusEmoji = ":office:";
+
+      if (workMode == "Hybrid") {
+        statusText = "Commuting";
+        statusEmoji = ":bus:";
+      } else if (workMode == "WFA") {
+        statusText = "Working remotely";
+        statusEmoji = ":house_with_garden:";
+      }
+
+      // Update status pengguna
+      await userClient.users.profile.set({
+          user: userId,
+          profile: {
+              status_text: statusText,
+              status_emoji: statusEmoji,
+              status_expiration: endDatetime, // Opsional: hapus status otomatis
+          }
+      });
+
   } catch (error) {
       console.error('Error approving timesheet:', error);
       await client.chat.postMessage({
@@ -835,27 +856,6 @@ async function handleTimesheetApproval({ client, userId, email, startDate, endDa
           const errorText = await apiResponse.text();
           throw new Error(`Salesforce email: ${email}, API Error: ${errorText}`);
       }
-
-      let statusText = "Office";
-      let statusEmoji = ":office:";
-
-      if (workMode == "Hybrid") {
-      statusText = "Commuting";
-      statusEmoji = ":bus:";
-      } else if (workMode == "WFA") {
-      statusText = "Working remotely";
-      statusEmoji = ":house_with_garden:";
-      }
-
-      // Update status pengguna
-      await userClient.users.profile.set({
-          user: userId,
-          profile: {
-              status_text: statusText,
-              status_emoji: statusEmoji,
-              status_expiration: endDate, // Opsional: hapus status otomatis
-          }
-      });
 
   } catch (error) {
       console.error('Error handling timesheet approval:', error);
