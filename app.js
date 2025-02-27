@@ -370,13 +370,9 @@ app.view('timesheet_modal', async ({ ack, body, view, client }) => {
       const workMode = view.state.values.work_mode_block.work_mode.selected_option.value;
 
       // Proses data yang diterima
-      console.log('Start Datetime:', startDatetime);
-      console.log('End Datetime:', endDatetime);
-      console.log('Work Mode:', workMode);
 
       // Lanjutkan dengan fungsi yang Anda inginkan setelah submit
       const userId = body.user.id;
-      console.log("User :", userId);
       // Dapatkan informasi pengguna
       const userInfo = await client.users.info({
           user: body.user.id,
@@ -384,7 +380,6 @@ app.view('timesheet_modal', async ({ ack, body, view, client }) => {
 
       // Ambil email dari profil pengguna
       const email = userInfo.user.profile?.email || "unknown@example.com";
-      console.log("User Email:", email);
 
       const timeSheetChannelId = "C08DANL8MBM"; //sandbox
       // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
@@ -460,8 +455,6 @@ app.action('approve_request', async ({ ack, body, client, action }) => {
       
       const startDate = formatTimestamp(startDatetime);
       const endDate = formatTimestamp(endDatetime);
-      console.log('Start Datetime:', startDate);
-      console.log('End Datetime:', endDate);
 
       // Proses pengiriman data ke Salesforce
       // Panggil fungsi yang diinginkan
@@ -624,7 +617,7 @@ app.command('/leaverequest-lks', async ({ ack, body, client }) => {
           }
       });
   } catch (error) {
-      console.error('Error opening timesheet modal:', error);
+      console.error('Error opening Leave Request modal:', error);
       console.error(JSON.stringify(error, null, 2));
   }
 });
@@ -637,15 +630,8 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
       const endDate = view.state.values.end_date_block.end_date.selected_date;
       const note = view.state.values.note_block.note.value;
 
-      // Proses data yang diterima
-      console.log('title:', title);
-      console.log('startDate:', startDate);
-      console.log('endDate:', endDate);
-      console.log('note:', note);
-
       // Lanjutkan dengan fungsi yang Anda inginkan setelah submit
       const userId = body.user.id;
-      console.log("User :", userId);
       // Dapatkan informasi pengguna
       const userInfo = await client.users.info({
           user: body.user.id,
@@ -653,7 +639,6 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
 
       // Ambil email dari profil pengguna
       const email = userInfo.user.profile?.email || "unknown@example.com";
-      console.log("User Email:", email);
 
       const timeSheetChannelId = "C08DANL8MBM"; //sandbox
       // const timeSheetChannelId = "C08B7Q4Q0S2"; //prod
@@ -714,11 +699,11 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
           ],
       });
   } catch (error) {
-      console.error('Error submitting timesheet:', error);
+      console.error('Error submitting Leave Request:', error);
       console.error(JSON.stringify(error, null, 2));
       await client.chat.postMessage({
           channel: body.user.id,
-          text: '❌ Sorry, there was an error submitting your timesheet.'
+          text: '❌ Sorry, there was an error submitting your Leave Request.'
       });
   }
 });
@@ -731,8 +716,6 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
       
       const startDateFormatted = formatDate(startDate);
       const endDateFormatted = formatDate(endDate);
-      console.log('Start Datetime:', startDateFormatted);
-      console.log('End Datetime:', endDateFormatted);
 
       // Proses pengiriman data ke Salesforce
       // Panggil fungsi yang diinginkan
@@ -768,10 +751,10 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
       });
 
   } catch (error) {
-      console.error('Error approving timesheet:', error);
+      console.error('Error approving Leave Request:', error);
       await client.chat.postMessage({
           channel: userId,
-          text: `❌ Error approving your timesheet: ${error.message}`,
+          text: `❌ Error approving your Leave Request: ${error.message}`,
       });
   }
 });
@@ -804,21 +787,16 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
       });
 
   } catch (error) {
-      console.error('Error rejecting timesheet:', error);
+      console.error('Error rejecting Leave Request:', error);
       await client.chat.postMessage({
           channel: userId,
-          text: `❌ Error rejecting your timesheet: ${error.message}`,
+          text: `❌ Error rejecting your Leave Request: ${error.message}`,
       });
   }
 });
 
 async function getSalesforceToken() {
-  //sandbox
-  const salesforceTokenUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/oauth2/token?grant_type=password&client_id=3MVG9Po2PmyYruunnyVvSeN53GfglSltLNdZQnnfFHuMSzNqIGmMC_qvWLAQS005qlwLJyU20clsCL6ZG0l1x&client_secret=6897962A378DC71C222378F0199720E44D4E9DCEAF76EA326DDD74F7EB00E5E2&username=timesheet@integration.com&password=Slipi@2025";
-  //prod
-  // const salesforceTokenUrl = "https://langitkreasisolusindo.my.salesforce.com/services/oauth2/token?grant_type=password&client_id=3MVG9wt4IL4O5wvIVaQ.kFvsOzhobbDoL1Fvc.6xHEpxwuKIoQtDXX3N__gBbQAUeyWIEeMxfrkGdlFZa49Jg&client_secret=76032DC08F1F50CC9DAA5F3281FC369250903B45812DA5CC7E53C9BFFC8AB49E&username=duktek.integrationlks@langitkreasi.com&password=Slipi@2024";
-
-  const salesforceResponse = await fetch(salesforceTokenUrl, {
+  const salesforceResponse = await fetch(process.env.SALESFORCE_TOKEN_URL, {
       method: "POST",
   });
 
@@ -832,14 +810,7 @@ async function getSalesforceToken() {
 
 async function handleTimesheetApproval({ client, userId, email, startDate, endDate, workMode }) {
   try {
-      console.log('Start Datetime2:', startDate);
-      console.log('End Datetime2:', endDate);
-
-      // Kirim data ke Salesforce API (contoh)
-      //sandbox
       const salesforceApiUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/apexrest/time-sheet/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
-      //prod
-      // const salesforceApiUrl = "https://langitkreasisolusindo.my.salesforce.com/services/apexrest/time-sheet/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
       
       const accessToken = await getSalesforceToken();
 
@@ -863,8 +834,6 @@ async function handleTimesheetApproval({ client, userId, email, startDate, endDa
           const errorText = await apiResponse.text();
           throw new Error(`Salesforce email: ${email}, API Error: ${errorText}`);
       }
-
-      console.log("Timesheet data successfully sent to Salesforce");
 
       let statusText = "Office";
       let statusEmoji = ":office:";
@@ -898,14 +867,7 @@ async function handleTimesheetApproval({ client, userId, email, startDate, endDa
 
 async function handleLeaveRequestApproval({ client, userId, email, startDateFormatted, endDateFormatted, title, note }) {
   try {
-      console.log('Start Datetime2:', startDateFormatted);
-      console.log('End Datetime2:', endDateFormatted);
-
-      // Kirim data ke Salesforce API (contoh)
-      //sandbox
       const salesforceApiUrl = "https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com/services/apexrest/leave-request/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
-      //prod
-      // const salesforceApiUrl = "https://langitkreasisolusindo.my.salesforce.com/services/apexrest/leave-request/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
       
       const accessToken = await getSalesforceToken();
 
@@ -931,13 +893,11 @@ async function handleLeaveRequestApproval({ client, userId, email, startDateForm
           throw new Error(`Salesforce email: ${email}, API Error: ${errorText}`);
       }
 
-      console.log("Timesheet data successfully sent to Salesforce");
-
   } catch (error) {
-      console.error('Error handling timesheet approval:', error);
+      console.error('Error handling Leave Request approval:', error);
       await client.chat.postMessage({
           channel: userId,
-          text: `❌ Error processing your timesheet: ${error.message}`
+          text: `❌ Error processing your Leave Request: ${error.message}`
       });
   }
 }
