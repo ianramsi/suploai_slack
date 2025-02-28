@@ -133,7 +133,7 @@ const assistant = new Assistant({
         { role: 'user', content: message.text }
       ];
 
-      logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
+      // logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
 
       const llmResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
