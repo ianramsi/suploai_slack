@@ -3,10 +3,10 @@ const { WebClient } = require('@slack/web-api');
 const { config } = require('dotenv');
 const { OpenAI } = require('openai');
 // Removed unused ESM import that caused Jest compatibility issues
-const axios = require('axios');
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
-const fetch = require('node-fetch');
+// const axios = require('axios');
+// const pdfParse = require('pdf-parse');
+//const mammoth = require('mammoth');
+const fetch = require('node-fetch'); //use npm install node-fetch@2
 
 config();
 
@@ -210,62 +210,62 @@ app.event('app_mention', async ({ event, client, say }) => {
 });
 
 //function to download file from slack
-async function downloadFile(url, token) {
-  const response = await axios.get(url, {
-    responseType: 'arraybuffer',
-    headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
-  });
-  return response.data;
-}
+// async function downloadFile(url, token) {
+//   const response = await axios.get(url, {
+//     responseType: 'arraybuffer',
+//     headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+//   });
+//   return response.data;
+// }
 
 //function to process document based on type
-async function processDocument(fileData, fileType) {
-  switch(fileType) {
-    case 'pdf': const pdfData = await pdfParse(fileData);
-      return pdfData.text;
-    case 'docx': const docxResult = await mammoth.extractRawText({ buffer: fileData});
-      return docxResult.value;
-    default: throw new Error('Sorry Document type not supported');
-  }
-}
+// async function processDocument(fileData, fileType) {
+//   switch(fileType) {
+//     case 'pdf': const pdfData = await pdfParse(fileData);
+//       return pdfData.text;
+//     case 'docx': const docxResult = await mammoth.extractRawText({ buffer: fileData});
+//       return docxResult.value;
+//     default: throw new Error('Sorry Document type not supported');
+//   }
+// }
 
 // add event listener to handle file uploads
-app.event('file_shared', async ({event, client, say}) => {
-  try {
-    const fileInfo = await client.files.info({file: event.file_id});
-    const fileType = fileInfo.file.filetype.toLowerCase();
+// app.event('file_shared', async ({event, client, say}) => {
+//   try {
+//     const fileInfo = await client.files.info({file: event.file_id});
+//     const fileType = fileInfo.file.filetype.toLowerCase();
 
-    //check if fie type is supported
-    if (fileType !== 'pdf' && fileType !== 'docx') {
-      await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
-      return;
-    }
+//     //check if fie type is supported
+//     if (fileType !== 'pdf' && fileType !== 'docx') {
+//       await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
+//       return;
+//     }
 
-    const fileData = await downloadFile(fileInfo.file.url_private);
-    const extractedText = await processDocument(fileData, fileType);
+//     const fileData = await downloadFile(fileInfo.file.url_private);
+//     const extractedText = await processDocument(fileData, fileType);
 
-    const messages = [
-      { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
-      { role: 'user', content: `Analyze this document content: ${extractedText}` }
-    ];
-    const llmResponse = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.7
-    });
+//     const messages = [
+//       { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
+//       { role: 'user', content: `Analyze this document content: ${extractedText}` }
+//     ];
+//     const llmResponse = await openai.chat.completions.create({
+//       model: 'gpt-4o-mini',
+//       messages,
+//       temperature: 0.7
+//     });
 
-    await say({ text: llmResponse.choices[0].message.content });
+//     await say({ text: llmResponse.choices[0].message.content });
 
-  } catch (error) {
-    if (error.message == 'Sorry Document type not supported') {
-      await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
-    } else {
-      await say ({ text: 'Something unexpected happened while processing your request' });
-      console.error('Document processing error --> ',error);
+//   } catch (error) {
+//     if (error.message == 'Sorry Document type not supported') {
+//       await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
+//     } else {
+//       await say ({ text: 'Something unexpected happened while processing your request' });
+//       console.error('Document processing error --> ',error);
       
-    }  
-  }
-});
+//     }  
+//   }
+// });
 
 app.command('/timesheet-lks', async ({ ack, body, client }) => {
   await ack();
