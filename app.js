@@ -30,7 +30,7 @@ const openai = new OpenAI({
 // });
 
 const userClient = new WebClient(process.env.SLACK_USER_TOKEN);
-const sfUrl = 'https://langitkreasisolusindo--devlks.sandbox.my.salesforce-setup.com';
+const sfUrl = 'https://langitkreasisolusindo.my.salesforce.com';
 
 const formatTimestamp = (timestamp) => {
   const date = new Date((timestamp + 7 * 60 * 60) * 1000); // Adjust for timezone
