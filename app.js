@@ -51,6 +51,12 @@ const formatDate = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
+function getTimestampForTime(hours, minutes) {
+  const now = new Date();
+  now.setHours(hours, minutes, 0, 0);
+  return Math.floor(now.getTime() / 1000);
+}
+
 const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
 Users in the workspace will ask you to help them write something or to think better about a specific topic.
 You'll respond to those questions in a professional way unless explicitly requested otherwise.
@@ -294,7 +300,7 @@ app.command('/timesheet-lks', async ({ ack, body, client }) => {
                     element: {
                         type: 'datetimepicker',
                         action_id: 'start_datetime',
-                        initial_date_time: Math.floor(Date.now() / 1000) // Set initial time to current time in seconds
+                        initial_date_time: getTimestampForTime(9, 0) 
                     },
                     label: {
                         type: 'plain_text',
@@ -307,7 +313,7 @@ app.command('/timesheet-lks', async ({ ack, body, client }) => {
                     element: {
                         type: 'datetimepicker',
                         action_id: 'end_datetime',
-                        initial_date_time: Math.floor(Date.now() / 1000) // Set initial time to current time in seconds
+                        initial_date_time: getTimestampForTime(18, 0) 
                     },
                     label: {
                         type: 'plain_text',
