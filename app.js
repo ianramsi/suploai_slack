@@ -54,7 +54,7 @@ const formatDate = (dateStr) => {
 function getTimestampForTime(hours, minutes) {
   const now = new Date();
   now.setHours(hours, minutes, 0, 0);
-  return Math.floor(now.getTime() / 1000);
+  return Math.floor(now.getTime() / 1000) - (7 * 3600); // kurangi 7 jam dalam detik;
 }
 
 const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
