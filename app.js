@@ -30,7 +30,10 @@ const openai = new OpenAI({
 // });
 
 const userClient = new WebClient(process.env.SLACK_USER_TOKEN);
+
+//change url for sandbox or prod
 const sfUrl = 'https://langitkreasisolusindo.my.salesforce.com';
+// const sfUrl = 'https://langitkreasisolusindo--devlks.sandbox.my.salesforce.com';
 
 const formatTimestamp = (timestamp) => {
   const date = new Date((timestamp + 7 * 60 * 60) * 1000); // Adjust for timezone
@@ -351,6 +354,13 @@ app.command('/timesheet-lks', async ({ ack, body, client }) => {
                                     text: 'Hybrid'
                                 },
                                 value: 'Hybrid'
+                            },
+                            {
+                                text: {
+                                    type: 'plain_text',
+                                    text: 'Sick'
+                                },
+                                value: 'Sick'
                             }
                         ]
                     },
@@ -513,6 +523,9 @@ app.action('approve_request', async ({ ack, body, client, action }) => {
     } else if (workMode == "WFA") {
       statusText = "Working remotely";
       statusEmoji = ":house_with_garden:";
+    } else if (workMode == "Sick") {
+      statusText = "Sick";
+      statusEmoji = ":face_with_thermometer:";
     }
 
     // Update status pengguna
@@ -604,6 +617,38 @@ app.command('/leaverequest-lks', async ({ ack, body, client }) => {
             blocks: [
                 {
                     type: 'input',
+                    block_id: 'type_block',
+                    element: {
+                        type: 'static_select',
+                        action_id: 'type',
+                        placeholder: {
+                            type: 'plain_text',
+                            text: 'Select type'
+                        },
+                        options: [
+                          {
+                              text: {
+                                  type: 'plain_text',
+                                  text: 'Leave'
+                              },
+                              value: 'Leave'
+                          },
+                          {
+                              text: {
+                                  type: 'plain_text',
+                                  text: 'Sick'
+                              },
+                              value: 'Sick'
+                          }
+                        ]
+                    },
+                    label: {
+                        type: 'plain_text',
+                        text: 'Type'
+                    }
+                },
+                {
+                    type: 'input',
                     block_id: 'title_block',
                     label: {
                         type: 'plain_text',
@@ -660,6 +705,20 @@ app.command('/leaverequest-lks', async ({ ack, body, client }) => {
                         text: 'Enter additional notes'
                         }
                     }
+                },
+                {
+                    type: 'input',
+                    block_id: 'file_block',
+                    label: {
+                        type: 'plain_text',
+                        text: 'Attachment'
+                    },
+                    element: {
+                        type: 'file_input',
+                        action_id: 'file',
+                        filetypes: ['pdf', 'doc', 'docx', 'jpg', 'png'], // Optional: specify allowed file types
+                    },
+                    optional: true // Optional: make the file input optional
                 }
             ]
         }
@@ -673,6 +732,7 @@ app.command('/leaverequest-lks', async ({ ack, body, client }) => {
 app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
   await ack();
   try {
+    const type = view.state.values.type_block.type.selected_option.value;
     const title = view.state.values.title_block.title.value;
     const startDate = view.state.values.start_date_block.start_date.selected_date;
     const endDate = view.state.values.end_date_block.end_date.selected_date;
@@ -690,61 +750,85 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
 
     const timeSheetChannelId = process.env.SLACK_TIMESHEET_CHANNEL;
 
-    const updatedMsg = `<@${userId}> submitted the following Leave Request: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`;
+    let fileUrl = null;
+    try {
+      const fileBlock = view.state.values.file_block?.file;
+      
+      if (fileBlock && fileBlock.files && fileBlock.files.length > 0) {
+        const uploadedFile = fileBlock.files[0];
 
-    await client.chat.postMessage({
-        channel: timeSheetChannelId,
-        text: updatedMsg,
-        blocks: [
+        // Ambil permalink
+        fileUrl = uploadedFile.permalink;
+      }else{
+        console.error('File upload not found');
+      }
+    } catch (fileUploadError) {
+      console.error('File upload error:', fileUploadError);
+      // Tetap lanjutkan dengan proses utama meskipun upload file gagal
+    }
+
+    const updatedMsg = `<@${userId}> submitted the following Leave Request: ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}${fileUrl ? `\nAttachment: ${fileUrl}` : ''}`;
+
+    const messageOptions = {
+      channel: timeSheetChannelId,
+      text: updatedMsg,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: updatedMsg,
+          },
+        },
+        {
+          type: "actions",
+          block_id: `leaverequest_actions`,
+          elements: [
             {
-                type: "section",
-                text: {
-                    type: "mrkdwn",
-                    text: updatedMsg,
-                },
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "Approve",
+              },
+              action_id: "approve_request_lr",
+              style: "primary",
+              value: JSON.stringify({
+                type,
+                email,
+                startDate,
+                endDate,
+                title,
+                note,
+                userId,
+                fileUrl
+              }),
             },
             {
-                type: "actions",
-                block_id: `leaverequest_actions`,
-                elements: [
-                    {
-                        type: "button",
-                        text: {
-                            type: "plain_text",
-                            text: "Approve",
-                        },
-                        action_id: "approve_request_lr",
-                        style: "primary",
-                        value: JSON.stringify({
-                            email,
-                            startDate,
-                            endDate,
-                            title,
-                            note,
-                            userId,
-                        }),
-                    },
-                    {
-                        type: "button",
-                        text: {
-                            type: "plain_text",
-                            text: "Reject",
-                        },
-                        action_id: "reject_request_lr",
-                        style: "danger",
-                        value: JSON.stringify({
-                            email,
-                            startDate,
-                            endDate,
-                            title,
-                            note,
-                            userId,
-                        }),
-                    },
-                ],
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "Reject",
+              },
+              action_id: "reject_request_lr",
+              style: "danger",
+              value: JSON.stringify({
+                type,
+                email,
+                startDate,
+                endDate,
+                title,
+                note,
+                userId,
+                fileUrl
+              }),
             },
-        ],
-    });
+          ],
+        },
+      ],
+    };
+
+    await client.chat.postMessage(messageOptions);
+
   } catch (error) {
     console.error('Error submitting Leave Request:', error);
     console.error(JSON.stringify(error, null, 2));
@@ -759,7 +843,7 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
   await ack(); // Acknowledge the action first
   try {
     const metadata = JSON.parse(action.value);
-    const { email, startDate, endDate, title, note, userId } = metadata;
+    const { type, email, startDate, endDate, title, note, userId, fileUrl } = metadata;
     
     const startDateFormatted = formatDate(startDate);
     const endDateFormatted = formatDate(endDate);
@@ -767,19 +851,21 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
     // Proses pengiriman data ke Salesforce
     // Panggil fungsi yang diinginkan
     await handleLeaveRequestApproval({
+        type,
         client,
         userId,
         email,
         startDateFormatted,
         endDateFormatted,
         title,
-        note
+        note,
+        fileUrl
     });
 
     // Kirim konfirmasi ke pengguna
     await client.chat.postMessage({
         channel: userId,
-        text: `Your Leave Request has been :white_check_mark: approved: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+        text: `Your Leave Request has been :white_check_mark: approved: ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
     });
 
     const approverId = body.user.id;
@@ -793,7 +879,7 @@ app.action('approve_request_lr', async ({ ack, body, client, action }) => {
                 type: "section",
                 text: {
                     type: "mrkdwn",
-                    text: `Leave Request submitted by <@${userId}> : \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+                    text: `Leave Request submitted by <@${userId}> : ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}${fileUrl ? `\nAttachment: ${fileUrl}` : ''}`,
                 },
             },
             {
@@ -821,12 +907,12 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
   await ack(); // Acknowledge the action first
   try {
     const metadata = JSON.parse(action.value);
-    const { email, startDate, endDate, title, note, userId } = metadata;
+    const { type, email, startDate, endDate, title, note, userId, fileUrl } = metadata;
 
     // Kirim notifikasi penolakan ke pengguna
     await client.chat.postMessage({
         channel: userId,
-        text: `Your Leave Request has been :x: rejected: \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+        text: `Your Leave Request has been :x: rejected: ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
     });
 
     const approverId = body.user.id;
@@ -840,7 +926,7 @@ app.action('reject_request_lr', async ({ ack, body, client, action }) => {
                 type: "section",
                 text: {
                     type: "mrkdwn",
-                    text: `Leave Request submitted by <@${userId}> : \nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+                    text: `Leave Request submitted by <@${userId}> : ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}${fileUrl ? `\nAttachment: ${fileUrl}` : ''}`,
                 },
             },
             {
@@ -914,18 +1000,20 @@ async function handleTimesheetApproval({ client, userId, email, startDate, endDa
   }
 }
 
-async function handleLeaveRequestApproval({ client, userId, email, startDateFormatted, endDateFormatted, title, note }) {
+async function handleLeaveRequestApproval({ type, client, userId, email, startDateFormatted, endDateFormatted, title, note, fileUrl }) {
   try {
     const salesforceApiUrl = sfUrl+"/services/apexrest/leave-request/v1.0/Submit"; // Ganti dengan URL API Salesforce yang sesuai
     
     const accessToken = await getSalesforceToken();
 
     const postData = {
+        Type: type,
         Email: email,
         Title: title,
         Note: note,
         StartDate: startDateFormatted,
         EndDate: endDateFormatted,
+        FileUrl: fileUrl,
     };
 
     const apiResponse = await fetch(salesforceApiUrl, {
