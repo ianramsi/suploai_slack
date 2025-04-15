@@ -8,6 +8,10 @@ const { OpenAI } = require('openai');
 //const mammoth = require('mammoth');
 const fetch = require('node-fetch'); //use npm install node-fetch@2
 
+//change url for sandbox or prod
+const sfUrl = 'https://langitkreasisolusindo.my.salesforce.com';
+// const sfUrl = 'https://langitkreasisolusindo--devlks.sandbox.my.salesforce.com';
+
 config();
 
 /** Initialization Slack*/
@@ -30,10 +34,6 @@ const openai = new OpenAI({
 // });
 
 const userClient = new WebClient(process.env.SLACK_USER_TOKEN);
-
-//change url for sandbox or prod
-const sfUrl = 'https://langitkreasisolusindo.my.salesforce.com';
-// const sfUrl = 'https://langitkreasisolusindo--devlks.sandbox.my.salesforce.com';
 
 const formatTimestamp = (timestamp) => {
   const date = new Date((timestamp + 7 * 60 * 60) * 1000); // Adjust for timezone
