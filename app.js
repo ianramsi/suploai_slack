@@ -452,6 +452,12 @@ app.view('timesheet_modal', async ({ ack, body, view, client }) => {
             },
         ],
     });
+
+    // Kirim konfirmasi ke pengguna
+    await client.chat.postMessage({
+        channel: userId,
+        text: `Your timesheet has been submitted: \n<!date^${startDatetime}^{date} at {time}|${startDatetime}> - <!date^${endDatetime}^{date} at {time}|${endDatetime}>\nWork Mode: ${workMode}`,
+    });
   } catch (error) {
     console.error('Error submitting timesheet:', error);
     console.error(JSON.stringify(error, null, 2));
@@ -828,6 +834,12 @@ app.view('leaverequest_modal', async ({ ack, body, view, client }) => {
     };
 
     await client.chat.postMessage(messageOptions);
+
+    // Kirim konfirmasi ke pengguna
+    await client.chat.postMessage({
+        channel: userId,
+        text: `Your Leave Request has been submitted: ${type}\nTitle : ${title}\n${startDate} - ${endDate}\nNote: ${note}`,
+    });
 
   } catch (error) {
     console.error('Error submitting Leave Request:', error);
