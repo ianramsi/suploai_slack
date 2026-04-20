@@ -8,6 +8,9 @@ const { OpenAI } = require('openai');
 //const mammoth = require('mammoth');
 const fetch = require('node-fetch'); //use npm install node-fetch@2
 
+// Salesforce read tools: schema definitions for OpenAI function calling + executor dispatcher
+const { SF_TOOLS, executeTool } = require('./sfTools');
+
 //change url for sandbox or prod
 const sfUrl = 'https://langitkreasisolusindo.my.salesforce.com';
 // const sfUrl = 'https://langitkreasisolusindo--devlks.sandbox.my.salesforce.com';
@@ -60,12 +63,91 @@ function getTimestampForTime(hours, minutes) {
   return Math.floor(now.getTime() / 1000) - (7 * 3600); // kurangi 7 jam dalam detik;
 }
 
-const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack Langit Kreasi Solusindo workspace.
-Users in the workspace will ask you to help them write something or to think better about a specific topic.
-You'll respond to those questions in a professional way unless explicitly requested otherwise.
-When you include markdown text, convert them to Slack compatible ones.
-When a prompt has Slack's special syntax like <@USER_ID> or <#CHANNEL_ID>, you must keep them as-is in your response.
-Avoid starting responses with greetings unless explicitly requested by the user.`;
+/**
+ * Runs an OpenAI chat completion with Salesforce tool support.
+ *
+ * This is the core AI loop used by both the Assistant DM thread and the @mention handler.
+ * It handles multi-step tool calls: if OpenAI requests a tool, we execute it against
+ * Salesforce, append the result, and call OpenAI again — repeating until the AI produces
+ * a final text response with no further tool calls.
+ *
+ * @param {Array<Object>} messages - OpenAI-format message history (system + user + assistant turns)
+ * @param {Object} [options] - Optional overrides
+ * @param {number} [options.maxIterations=5] - Safety cap to prevent infinite tool loops
+ * @returns {Promise<string>} The final assistant text response to send to the user
+ * @throws {Error} If OpenAI or any tool call fails
+ */
+async function runWithTools(messages, { maxIterations = 5 } = {}) {
+  let iteration = 0;
+
+  while (iteration < maxIterations) {
+    iteration++;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      n: 1,
+      messages,
+      tools: SF_TOOLS,
+      // "auto" lets the model decide whether to call a tool or respond directly
+      tool_choice: 'auto',
+      temperature: 0.7,
+    });
+
+    const choice = response.choices[0];
+
+    // If the model chose to respond directly (no tool calls), return the text
+    if (choice.finish_reason === 'stop' || !choice.message.tool_calls) {
+      return choice.message.content;
+    }
+
+    // Append the assistant's tool-calling message to the conversation history
+    messages.push(choice.message);
+
+    // Execute each tool call the AI requested (may be multiple in one turn)
+    for (const toolCall of choice.message.tool_calls) {
+      const toolName = toolCall.function.name;
+      const toolArgs = JSON.parse(toolCall.function.arguments);
+
+      let toolResult;
+      try {
+        toolResult = await executeTool(toolName, toolArgs);
+      } catch (err) {
+        // Return error as a tool result so the AI can explain it to the user
+        toolResult = JSON.stringify({ error: err.message });
+      }
+
+      // Append the tool result as a "tool" role message — required by OpenAI API
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: toolResult,
+      });
+    }
+  }
+
+  // Fallback if we hit the iteration cap (shouldn't happen in normal usage)
+  return 'Sorry, I ran into an issue retrieving that information. Please try again.';
+}
+
+/**
+ * System prompt sent to OpenAI on every conversation turn.
+ * Instructs the AI on its persona, capabilities, and tool usage rules.
+ * Keep this concise — it is prepended to every message array and counts toward token usage.
+ */
+const DEFAULT_SYSTEM_CONTENT = `You are Suplo, an assistant in a Slack workspace for Langit Kreasi Solusindo (LKS).
+You help users with general questions AND with querying Salesforce data (Contacts, Leads, Opportunities, Activities, Projects, and more).
+
+When a user asks about Salesforce records:
+- If they do not specify which object (e.g. Contact vs Lead), ask them first before searching.
+- Use describe_salesforce_object to discover available fields before writing SOQL queries.
+- Use search_records for keyword searches; use query_records for structured filters.
+- Present results clearly and concisely — avoid dumping raw JSON.
+
+General rules:
+- Respond professionally unless asked otherwise.
+- Convert markdown to Slack-compatible formatting.
+- Keep Slack syntax like <@USER_ID> or <#CHANNEL_ID> as-is in your responses.
+- Avoid greetings unless explicitly requested.`;
 
 // Assistant configuration and event handlers
 const assistant = new Assistant({
@@ -93,7 +175,7 @@ const assistant = new Assistant({
         });
       }
 
-      await setSuggestedPrompts({ prompts, title: 'Here are some suggested options by Suplo:' });
+      await setSuggestedPrompts({ prompts, title: 'HI How are you today?' });
     } catch (e) {
       logger.error(e);
     }
@@ -127,31 +209,24 @@ const assistant = new Assistant({
         oldest: thread_ts,
       });
 
-      // Filter out the initial greeting from thread history
+      // Filter out the initial greeting and keep only the last 10 messages for context
       const threadHistory = thread.messages
         .filter(m => m.text !== 'Hi, sorry Suplo lagi ngehang....')
-        .slice(-10) //keep only the last 10 of message
+        .slice(-10)
         .map(m => ({
           role: m.bot_id ? 'assistant' : 'user',
-          content: m.text
+          content: m.text,
         }));
 
+      // Build the message array: system prompt + thread history + current user message
       const messages = [
         { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
         ...threadHistory,
-        { role: 'user', content: message.text }
+        { role: 'user', content: message.text },
       ];
 
-      // logger.debug('Sending messages to LLM:', JSON.stringify(messages, null, 2));
-
-      const llmResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        n: 1,
-        messages,
-        temperature: 0.7 // Adding temperature for more varied responses
-      });
-
-      const responseContent = llmResponse.choices[0].message.content;
+      // Use the tool-calling loop so the AI can query Salesforce if needed
+      const responseContent = await runWithTools(messages);
       await say({ text: responseContent });
     } catch (e) {
       logger.error('Error processing user message:', e);
@@ -171,10 +246,21 @@ app.assistant(assistant);
   }
 })();
 
-// Enable direct mention for summarization
+/**
+ * Handles @mention events in any channel.
+ * Two modes:
+ *   1. Summarize — if the user says "summarize" or "summary", fetch recent channel messages
+ *      and ask the AI to produce a summary (no Salesforce tools needed here).
+ *   2. General — pass the message through the full tool-calling loop so the AI can
+ *      answer general questions or query Salesforce as needed.
+ */
 app.event('app_mention', async ({ event, client, say }) => {
-  if (event.text.toLowerCase().includes('summarize') || event.text.toLowerCase().includes('summary')) {
+  const messageText = event.text.toLowerCase();
+  const isSummarizeRequest = messageText.includes('summarize') || messageText.includes('summary');
+
+  if (isSummarizeRequest) {
     try {
+      // Fetch the last 50 messages in the channel to build the summary prompt
       const channelHistory = await client.conversations.history({
         channel: event.channel,
         limit: 50,
@@ -185,96 +271,39 @@ app.event('app_mention', async ({ event, client, say }) => {
         if (m.user) llmPrompt += `\n<@${m.user}> says: ${m.text}`;
       }
 
-      const messages = [
-        { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
-        { role: 'user', content: llmPrompt },
-      ];
-
+      // Summarization is a single-shot request — no Salesforce tools needed
       const llmResponse = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         n: 1,
-        messages,
+        messages: [
+          { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
+          { role: 'user', content: llmPrompt },
+        ],
       });
 
-      const responseContent = llmResponse.choices[0].message.content;
-      await say({ text: responseContent });
+      await say({ text: llmResponse.choices[0].message.content });
     } catch (error) {
-      console.error(error);
+      console.error('Error summarizing channel:', error);
+      await say({ text: 'Sorry, I had trouble summarizing this channel.' });
     }
   } else {
-    const messages = [
-      { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
-      { role: 'user', content: event.text },
-    ];
+    try {
+      // For all other @mentions, run the full tool-calling loop so the AI
+      // can query Salesforce if the question requires it
+      const messages = [
+        { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
+        { role: 'user', content: event.text },
+      ];
 
-    const llmResponse = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',//change from 'gpt-3.5-turbo',
-      n: 1,
-      messages,
-    });
-
-    const responseContent = llmResponse.choices[0].message.content;
-    await say({ text: responseContent });
+      const responseContent = await runWithTools(messages);
+      await say({ text: responseContent });
+    } catch (error) {
+      console.error('Error handling app_mention:', error);
+      await say({ text: 'Sorry, something went wrong processing your request.' });
+    }
   }
 });
 
-//function to download file from slack
-// async function downloadFile(url, token) {
-//   const response = await axios.get(url, {
-//     responseType: 'arraybuffer',
-//     headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
-//   });
-//   return response.data;
-// }
-
-//function to process document based on type
-// async function processDocument(fileData, fileType) {
-//   switch(fileType) {
-//     case 'pdf': const pdfData = await pdfParse(fileData);
-//       return pdfData.text;
-//     case 'docx': const docxResult = await mammoth.extractRawText({ buffer: fileData});
-//       return docxResult.value;
-//     default: throw new Error('Sorry Document type not supported');
-//   }
-// }
-
-// add event listener to handle file uploads
-// app.event('file_shared', async ({event, client, say}) => {
-//   try {
-//     const fileInfo = await client.files.info({file: event.file_id});
-//     const fileType = fileInfo.file.filetype.toLowerCase();
-
-//     //check if fie type is supported
-//     if (fileType !== 'pdf' && fileType !== 'docx') {
-//       await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
-//       return;
-//     }
-
-//     const fileData = await downloadFile(fileInfo.file.url_private);
-//     const extractedText = await processDocument(fileData, fileType);
-
-//     const messages = [
-//       { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
-//       { role: 'user', content: `Analyze this document content: ${extractedText}` }
-//     ];
-//     const llmResponse = await openai.chat.completions.create({
-//       model: 'gpt-4o-mini',
-//       messages,
-//       temperature: 0.7
-//     });
-
-//     await say({ text: llmResponse.choices[0].message.content });
-
-//   } catch (error) {
-//     if (error.message == 'Sorry Document type not supported') {
-//       await say({ text: 'Sorry, Suplo only supports PDF and DOCX files at the moment.' });
-//     } else {
-//       await say ({ text: 'Something unexpected happened while processing your request' });
-//       console.error('Document processing error --> ',error);
-      
-//     }  
-//   }
-// });
 
 app.command('/timesheet-lks', async ({ ack, body, client }) => {
   await ack();
